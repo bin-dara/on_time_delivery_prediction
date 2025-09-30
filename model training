@@ -1,0 +1,86 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+import joblib
+
+# Load your dataset
+df = pd.read_csv("incom2024_delay_example_dataset.csv")
+df.columns = df.columns.str.strip().str.upper()
+print(df.columns.tolist())
+
+
+# Define features and target
+features = [
+    "SHIPPING_DATE", "ORDER_ITEM_QUANTITY", 
+    "ORDER_ITEM_TOTAL_AMOUNT", "ORDER_ITEM_DISCOUNT_RATE", 
+    "SALES", "PRODUCT_PRICE", "ORDER_PROFIT_PER_ORDER", 
+    "SHIPPING_MODE", "ORDER_REGION", "PAYMENT_TYPE", "CUSTOMER_CITY"
+]
+
+target = "LABEL"
+
+# Convert date features to useful numerical features (e.g. day, month, diff)
+# Parse dates safely (force UTC to avoid mixed tz issues)
+# Convert date features (safe parsing)
+
+df["SHIPPING_DATE"] = pd.to_datetime(df["SHIPPING_DATE"], errors="coerce", utc=True)
+
+# Drop rows where dates are missing or invalid
+df = df.dropna(subset=[ "SHIPPING_DATE"])
+
+df["SHIPPING_WEEKDAY"] = df["SHIPPING_DATE"].dt.weekday
+
+
+
+# Replace feature set with transformed features
+
+y = df[target]
+
+# Define categorical and numeric columns
+categorical = ["SHIPPING_MODE", "ORDER_REGION", "PAYMENT_TYPE", "CUSTOMER_CITY"]
+
+X = df[ [
+    "ORDER_ITEM_QUANTITY", "ORDER_ITEM_TOTAL_AMOUNT",
+    "ORDER_ITEM_DISCOUNT_RATE", "SALES",
+    "PRODUCT_PRICE", "ORDER_PROFIT_PER_ORDER",
+    "SHIPPING_MODE", "ORDER_REGION",
+    "PAYMENT_TYPE", "CUSTOMER_CITY",
+    "SHIPPING_WEEKDAY"        # <--- new feature
+]]
+
+numeric = [
+    "ORDER_ITEM_QUANTITY", "ORDER_ITEM_TOTAL_AMOUNT",
+    "ORDER_ITEM_DISCOUNT_RATE", "SALES",
+    "PRODUCT_PRICE", "ORDER_PROFIT_PER_ORDER",
+    "SHIPPING_WEEKDAY"        # <--- numeric
+]
+
+
+# Preprocessing
+preprocessor = ColumnTransformer([
+    ("num", StandardScaler(), numeric),
+    ("cat", OneHotEncoder(handle_unknown="ignore"), categorical)
+])
+
+# ML Pipeline
+model = Pipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("classifier", RandomForestClassifier(n_estimators=200, random_state=42))
+])
+
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Fit model
+model.fit(X_train, y_train)
+
+# Evaluate
+y_pred = model.predict(X_test)
+print(classification_report(y_test, y_pred))
+
+# Save model for Streamlit
+joblib.dump(model, "supply_chain_model_2.pkl")
